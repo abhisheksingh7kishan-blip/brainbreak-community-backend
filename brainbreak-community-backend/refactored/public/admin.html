@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Community World — Moderation</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; font-family: -apple-system, system-ui, sans-serif; background:#0b0d18; color:#eaf0ff; }
+  .wrap { max-width: 560px; margin: 0 auto; padding: 20px 16px 60px; }
+  h1 { font-size: 18px; letter-spacing: 1px; margin: 0 0 4px; }
+  .sub { color: #8892b0; font-size: 12px; margin-bottom: 20px; }
+  input { width: 100%; box-sizing: border-box; padding: 11px 12px; margin-bottom: 10px; border-radius: 8px;
+    border: 1px solid #2a2f4a; background: #10132a; color: #fff; font-size: 14px; }
+  button { padding: 10px 14px; border-radius: 8px; border: none; font-size: 13px; font-weight: 700;
+    cursor: pointer; letter-spacing: 0.5px; }
+  .btn-primary { background: linear-gradient(90deg,#36D9FF,#8B5CFF); color:#04061a; width:100%; padding:12px; }
+  .btn-remove { background:#ff4f5e; color:#fff; }
+  .btn-dismiss { background:#2a2f4a; color:#eaf0ff; }
+  #loginBox { max-width: 320px; margin: 60px auto; }
+  #err { color:#ff8a90; font-size:12px; min-height:16px; margin-bottom: 8px; }
+  .card { background:#12152c; border:1px solid #23274a; border-radius:12px; padding:14px; margin-bottom:12px; }
+  .card .level { font-weight:700; font-size:14px; }
+  .card .meta { color:#8892b0; font-size:11px; margin-top:4px; }
+  .card .reason { display:inline-block; margin-top:8px; padding:3px 8px; border-radius:6px; background:#2a2f4a; font-size:10px; letter-spacing:0.5px; }
+  .card .details { font-size:12px; color:#c8cfe6; margin-top:8px; white-space:pre-wrap; }
+  .card .actions { margin-top:12px; display:flex; gap:8px; }
+  #empty { text-align:center; color:#8892b0; padding:40px 0; font-size:13px; }
+  #logoutBar { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
+  #logoutBtn { background:transparent; color:#8892b0; border:1px solid #2a2f4a; padding:6px 10px; font-size:11px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div id="loginBox">
+    <h1>Moderation Login</h1>
+    <div class="sub">Sign in with the admin account created in Supabase → Authentication → Users, whose profile has role = 'admin'.</div>
+    <input id="email" type="email" placeholder="admin@example.com" autocomplete="username">
+    <input id="password" type="password" placeholder="Password" autocomplete="current-password">
+    <div id="err"></div>
+    <button class="btn-primary" id="loginBtn">Sign In</button>
+  </div>
+
+  <div id="dashboard" style="display:none;">
+    <div id="logoutBar">
+      <div><h1 style="margin:0;">Pending Reports</h1><div class="sub" style="margin:2px 0 0;">Community World moderation</div></div>
+      <button id="logoutBtn">Sign out</button>
+    </div>
+    <div id="reportsList"></div>
+    <div id="empty" style="display:none;">No pending reports. 🎉</div>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+  // Same two values as brainbreak.html's CW_SUPABASE_URL / CW_SUPABASE_ANON_KEY.
+  const SUPABASE_URL = 'https://YOUR-PROJECT-REF.supabase.co'; // <-- fill in
+  const SUPABASE_ANON_KEY = 'YOUR-ANON-PUBLIC-KEY'; // <-- fill in
+
+  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  async function authHeader() {
+    const { data } = await sb.auth.getSession();
+    if (!data.session) return null;
+    return { Authorization: 'Bearer ' + data.session.access_token };
+  }
+
+  async function tryShowDashboard() {
+    const { data } = await sb.auth.getSession();
+    if (data.session) {
+      document.getElementById('loginBox').style.display = 'none';
+      document.getElementById('dashboard').style.display = 'block';
+      loadReports();
+    }
+  }
+
+  document.getElementById('loginBtn').addEventListener('click', async () => {
+    const email = document.getElementById('email').value.trim();
+    const password = document.getElementById('password').value;
+    const errEl = document.getElementById('err');
+    errEl.textContent = '';
+    const { error } = await sb.auth.signInWithPassword({ email, password });
+    if (error) { errEl.textContent = error.message; return; }
+    tryShowDashboard();
+  });
+
+  document.getElementById('logoutBtn').addEventListener('click', async () => {
+    await sb.auth.signOut();
+    document.getElementById('dashboard').style.display = 'none';
+    document.getElementById('loginBox').style.display = 'block';
+  });
+
+  function reasonLabel(r) {
+    return { broken: 'Broken', inappropriate: 'Inappropriate', spam: 'Spam', exploit: 'Exploit', other: 'Other' }[r] || r;
+  }
+
+  async function loadReports() {
+    const headers = await authHeader();
+    if (!headers) return;
+    const listEl = document.getElementById('reportsList');
+    const emptyEl = document.getElementById('empty');
+    listEl.innerHTML = '<div class="sub">Loading…</div>';
+    try {
+      const res = await fetch('/api/admin/reports/list?status=pending', { headers });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || 'Failed to load reports.');
+      }
+      const data = await res.json();
+      if (!data.reports.length) {
+        listEl.innerHTML = '';
+        emptyEl.style.display = 'block';
+        return;
+      }
+      emptyEl.style.display = 'none';
+      listEl.innerHTML = data.reports.map((r) => `
+        <div class="card" data-id="${r.id}">
+          <div class="level">${escapeHtml(r.level ? r.level.name : 'Level unavailable')}</div>
+          <div class="meta">by ${escapeHtml(r.level ? r.level.creatorName : 'Unknown')} · reported by ${escapeHtml(r.reporterName)} · ${new Date(r.createdAt).toLocaleString()}</div>
+          <span class="reason">${reasonLabel(r.reason)}</span>
+          ${r.details ? `<div class="details">${escapeHtml(r.details)}</div>` : ''}
+          <div class="actions">
+            <button class="btn-remove" data-action="remove_level">Remove Level</button>
+            <button class="btn-dismiss" data-action="dismiss">Dismiss</button>
+          </div>
+        </div>
+      `).join('');
+      listEl.querySelectorAll('button[data-action]').forEach((btn) => {
+        btn.addEventListener('click', () => review(btn.closest('.card').getAttribute('data-id'), btn.getAttribute('data-action')));
+      });
+    } catch (e) {
+      listEl.innerHTML = '<div class="sub" style="color:#ff8a90;">' + escapeHtml(e.message) + '</div>';
+    }
+  }
+
+  async function review(reportId, action) {
+    if (action === 'remove_level' && !confirm('Remove this level? This takes it down for everyone.')) return;
+    const headers = await authHeader();
+    if (!headers) return;
+    try {
+      const res = await fetch('/api/admin/reports/review', {
+        method: 'POST',
+        headers: Object.assign({ 'Content-Type': 'application/json' }, headers),
+        body: JSON.stringify({ reportId, action }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || 'Action failed.');
+      }
+      loadReports();
+    } catch (e) {
+      alert(e.message);
+    }
+  }
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  }
+
+  tryShowDashboard();
+</script>
+</body>
+</html>

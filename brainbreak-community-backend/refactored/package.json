@@ -1,0 +1,10 @@
+{
+  "name": "brainbreak-community-backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Vercel backend for BrainBreak's Community World: creator profiles, level publishing, likes/favorites/plays, leaderboards, and achievements. Supabase is the database; every write is authorized either by the caller's own forwarded Supabase session (RLS-enforced) or, for the small trusted set of backend-only operations, the service-role key — see api/_lib/supabaseClients.js.",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0"
+  }
+}
