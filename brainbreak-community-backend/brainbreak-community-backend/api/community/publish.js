@@ -1,18 +1,14 @@
-// /api/_lib/controllers/publish.js
+// /api/community/publish.js
 //
 // POST /api/community/publish
 // Body: { schemaVersion, gameplayFormat, level: { id, name, description, gameplay }, requestedVersionNumber, remoteId }
 // (exact shape sent by COMMUNITY_PUBLISH.buildPayload() in brainbreak.html)
 //
-// Logic moved verbatim from the original single-purpose file
-// api/community/publish.js (deleted; its URL now routes here via
-// api/community/[...path].js). No behavior change.
-//
 // `level.id` is the CLIENT's local draft key — irrelevant to the database,
-// which always assigns its own permanent uuid. `remoteId` is that
-// server-assigned id, once the client has learned it from a previous
-// successful publish; null means "this device has never successfully
-// published this level before".
+// which always assigns its own permanent uuid (see community_world.sql's
+// comment on public.levels.id). `remoteId` is that server-assigned id,
+// once the client has learned it from a previous successful publish; null
+// means "this device has never successfully published this level before".
 //
 // Two paths:
 //   remoteId absent  -> INSERT a new levels row (creator_id forced from the
@@ -29,13 +25,17 @@
 // version number — it's only ever informational; the response's
 // publishedVersion always comes from what the database actually assigned.
 
-import { requireUser, friendlyError } from '../supabaseClients.js';
-import { syncAchievementsFor } from '../syncAchievements.js';
+import { requireUser, friendlyError, handleCors } from '../_lib/supabaseClients.js';
+import { syncAchievementsFor } from '../_lib/syncAchievements.js';
 
 const MAX_TITLE = 100;
 const MAX_DESCRIPTION = 2000;
 
-export async function postPublish(req, res) {
+export default async function handler(req, res) {
+  if (handleCors(req, res)) return;
+
+  if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' });
+
   const auth = await requireUser(req, res);
   if (!auth) return;
   const { supabase, userId } = auth;

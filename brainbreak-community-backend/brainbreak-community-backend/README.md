@@ -11,49 +11,71 @@ this is the whole thing, from zero.
 ```
 api/
   _lib/
-    supabaseClients.js     <- the auth split every endpoint relies on
+    supabaseClients.js         <- the auth split every endpoint relies on
     syncAchievements.js
-  community/
-    publish.js             <- POST, create/update/publish a level
-    levels/
-      [id].js               <- GET one level (+ creator info)
-      [id]/play-data.js      <- GET full playable geometry for PLAY
-      discover.js           <- GET browse/search published levels (4 categories)
-      unpublish.js          <- POST take a level down
-    profile/
-      me.js                 <- GET/PATCH your own profile
-    creators/
-      leaderboard.js        <- GET ranked creators, by category
-      [id].js               <- GET one creator's public profile
-      [id]/levels.js         <- GET another creator's published levels
-      [id]/achievements.js   <- GET a creator's badges
-      me/levels.js           <- GET your own levels (any status)
-    interactions/
-      like.js / favorite.js / play.js
+  health.js                     <- GET, sanity-check after deploying
   cron/
-    refresh-leaderboard.js  <- scheduled, keeps rankings up to date
-  health.js                 <- GET, sanity-check after deploying
+    refresh-leaderboard.js      <- scheduled, keeps rankings up to date
+  community/
+    profile/
+      me.js                     <- GET/PATCH your own profile
+    publish.js                  <- POST, create/update/publish a level
+    creators/
+      [...path].js              <- dispatcher: leaderboard, [id], [id]/levels,
+                                    [id]/achievements, me/levels
+    interactions/
+      [...path].js              <- dispatcher: like, favorite, play
+    levels/
+      [...path].js              <- dispatcher: [id], [id]/play-data,
+                                    discover, report, unpublish
+  admin/
+    [...path].js                <- dispatcher: reports/list, reports/review
+src/
+  controllers/
+    creators.js                 <- business logic for the creators dispatcher
+    interactions.js             <- business logic for the interactions dispatcher
+    levels.js                   <- business logic for the levels dispatcher
+    admin.js                    <- business logic for the admin dispatcher
 sql/
   1_community_creator_leaderboards.sql
   2_community_creator_system_api.sql
   3_community_creator_discover.sql
   4_community_moderation_cooldown_rank.sql
-api/
-  admin/reports/
-    list.js                 <- GET pending reports (admin only)
-    review.js                <- POST remove level / dismiss (admin only)
-  community/levels/
-    report.js                <- POST, any player reports a level
 public/
-  admin.html                 <- standalone moderation page (not part of the game)
-vercel.json                 <- schedules the leaderboard refresh
+  index.html                    <- status page at the root URL (no function used)
+  admin.html                    <- standalone moderation page (not part of the game)
+test/
+  dispatch.test.mjs             <- offline regression test for every route
+  mocks/supabase-js-stub.mjs    <- test-only fake, never used in production
+vercel.json                     <- schedules the leaderboard refresh
 package.json
 .env.example
 ```
 
 You should already have `community_world.sql` (profiles/levels/likes/
-favorites/plays base schema) run in Supabase from earlier — the 3 files in
+favorites/plays base schema) run in Supabase from earlier — the 4 files in
 `sql/` here are additive on top of that, **run them in the numbered order**.
+
+### Why `[...path].js` files, and why there are only 8 functions
+
+Vercel Hobby caps a deployment at **12 Serverless Functions**. This project
+has 19 API routes, so four of the busiest folders (`creators`,
+`interactions`, `levels`, `admin`) are each served by a single Vercel
+"catch-all" function (`[...path].js`) that reads the URL's remaining path
+segments and the HTTP method, then calls the matching function in
+`src/controllers/`. Every external URL, HTTP method, auth check, and JSON
+response is unchanged from before — only the internal file that answers
+the request changed. `profile/me.js`, `publish.js`, `health.js`, and
+`cron/refresh-leaderboard.js` only ever had one route each, so they were
+left exactly as they were.
+
+**Final count: 8 Serverless Functions** (well under the 12 limit):
+`health.js`, `cron/refresh-leaderboard.js`, `community/profile/me.js`,
+`community/publish.js`, `community/creators/[...path].js`,
+`community/interactions/[...path].js`, `community/levels/[...path].js`,
+`admin/[...path].js`. Everything in `api/_lib/` and `src/` is a plain
+JS module, not a function — Vercel only turns files directly under `api/`
+into functions.
 
 ---
 
@@ -63,8 +85,11 @@ favorites/plays base schema) run in Supabase from earlier — the 3 files in
 If you don't already have a repo for this: on **github.com**, tap **+ →
 New repository**, give it a name, create it, then use **"Add file → Upload
 files"** (works fine on mobile) to upload every file above, keeping the
-exact same folder structure (including the `[id]` and `[id].js` names —
-type the brackets literally, GitHub handles them fine).
+exact same folder structure (including files literally named `[...path].js`
+and `me.js` inside `profile/` — type the brackets and dots literally,
+GitHub handles them fine). Make sure `src/` and `public/index.html` get
+uploaded too, not just `api/` — the dispatcher functions import from
+`src/`, and the root URL needs `public/index.html` to stop 404ing.
 
 ### 2. Run the 4 SQL files in Supabase
 Supabase → your project → **SQL Editor** → **+ New query** → paste →
@@ -119,28 +144,49 @@ one automatically once it sees the `crons` entry in `vercel.json`.
 Vercel → **Deployments** tab → tap **⋮** on the latest one → **Redeploy**.
 
 ### 7. Check it worked
-Open, in your phone browser:
+Open, in your phone browser, just the root URL:
 ```
-https://your-project.vercel.app/api/health
+https://your-project.vercel.app/
 ```
-You should see `"ok": true` with every field green/true. If `dbOk` is
-false, re-check the 3 SQL files ran without error. If any `env` field is
-false, re-check that exact variable name in step 5 (typos are the #1
-cause).
+This loads `public/index.html`, a small status page that calls
+`/api/health` for you and shows **"All systems operational"** in green
+once Supabase and every env var are reachable — no more blank 404 at the
+root. If anything's off, it turns red and shows which check failed
+(database unreachable, or a specific env var missing) plus the raw error
+text from Supabase. It auto-refreshes every 30 seconds, or tap **Refresh**.
+
+(The raw JSON is still available directly at `/api/health` if you want it
+— same endpoint as before, unchanged.)
+
+If `database` shows red, re-check the 4 SQL files ran without error, in
+order. If an env var shows red, re-check that exact variable name in step
+5 (typos are the #1 cause).
 
 ### 8. Point the game at this backend
-In `brainbreak.html`, fill in (same values as step 5's first two rows):
+The game is packaged inside your Android app (Play Store), not served from
+this Vercel URL — so it needs the FULL backend URL, not a relative path.
+In `brainbreak.html`, find and fill in all three (same values as step 5's
+first two, plus your Vercel domain):
 ```js
 const CW_SUPABASE_URL = 'https://YOUR-PROJECT-REF.supabase.co';
 const CW_SUPABASE_ANON_KEY = 'YOUR-ANON-PUBLIC-KEY';
+const CW_API_BASE = 'https://your-project.vercel.app'; // no trailing slash
 ```
-The game calls relative paths like `/api/community/publish` — as long as
-`brainbreak.html` is served **from this same Vercel project** (e.g. you
-put it at the project root, or in a `public/` folder Vercel serves as
-static files), those calls resolve automatically. If the game is hosted
-somewhere else entirely, every `fetch('/api/...')` call in the client
-needs to become `fetch('https://your-project.vercel.app/api/...')`
-instead — say the word if that's your setup and I'll make that change.
+Every `fetch()` call in the client already goes through a `cwApi(path)`
+helper that prepends `CW_API_BASE` — filling in that one constant is all
+that's needed; no other client code changes.
+
+**Why this matters (CORS):** your app and this API are different origins
+from the WebView's point of view, so every API response needs
+cross-origin headers or the request gets silently blocked before your code
+ever sees a response. Every endpoint in this backend already sends
+`Access-Control-Allow-Origin: *` (see `handleCors()` in
+`api/_lib/supabaseClients.js`) — nothing more to configure here, but if
+you ever add a new endpoint file yourself, copy that same first line from
+any existing handler.
+
+Rebuild/re-export your Android app with the updated `brainbreak.html` and
+publish the update however you normally do (Play Console).
 
 ### 9. Set up the moderation page
 `public/admin.html` also needs the same two values filled in (`SUPABASE_URL`

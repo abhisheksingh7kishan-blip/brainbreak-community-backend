@@ -6,9 +6,11 @@
 // returns key values — only whether each is present, and whether a basic
 // public query succeeds.
 
-import { clientFor } from './_lib/supabaseClients.js';
+import { clientFor, handleCors } from './_lib/supabaseClients.js';
 
 export default async function handler(req, res) {
+  if (handleCors(req, res)) return;
+
   const envOk = {
     SUPABASE_URL: !!process.env.SUPABASE_URL,
     SUPABASE_ANON_KEY: !!process.env.SUPABASE_ANON_KEY,

@@ -1,32 +1,19 @@
-// /api/_lib/controllers/admin.js
+// /src/controllers/admin.js
 //
-// GET  /api/admin/reports/list?status=pending
-// POST /api/admin/reports/review  { reportId, action: 'remove_level' | 'dismiss' }
-//
-// Logic moved verbatim from the original single-purpose files
-// api/admin/reports/list.js and api/admin/reports/review.js (both
-// deleted; their URLs now route here via api/admin/[...path].js). No
-// behavior change.
+// Business logic for every /api/admin/* route. Moved here, unchanged in
+// behavior, from the original one-file-per-route handlers so a single
+// Vercel Serverless Function (api/admin/[...path].js) can dispatch to
+// all of them.
 
-import { requireAdmin, serviceClient, friendlyError } from '../supabaseClients.js';
+import { requireAdmin, serviceClient, friendlyError } from '../../api/_lib/supabaseClients.js';
 
 const REVIEW_ACTIONS = new Set(['remove_level', 'dismiss']);
 
-// Admin-only (requireAdmin verifies the caller's OWN profile.role via
-// their own forwarded token first). Once verified, uses the service-role
-// client for the actual read — level_reports' RLS only lets a normal user
-// see their OWN reports (level_reports_select_own), so an admin needs the
-// privileged connection to see everyone's.
-//
-// Note: `reporter:profiles!level_reports_reporter_id_fkey` relies on
-// Postgres's default foreign-key constraint naming
-// (`<table>_<column>_fkey`) since level_reports.reporter_id was declared
-// as a plain inline `references` in community_world.sql. If this join
-// ever errors with "could not find relationship", check the actual
-// constraint name in Supabase -> Table Editor -> level_reports -> and
-// update the string above, or fall back to two separate queries (reports,
-// then a second query for the reporter names by id).
+// GET /api/admin/reports/list?status=pending
+// (originally api/admin/reports/list.js)
 export async function listReports(req, res) {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'method_not_allowed' });
+
   const auth = await requireAdmin(req, res);
   if (!auth) return; // requireAdmin already sent 401/403
 
@@ -68,14 +55,11 @@ export async function listReports(req, res) {
   });
 }
 
-// Admin-only. The admin check happens with the caller's OWN identity
-// (requireAdmin, via their forwarded token — can't be spoofed); the
-// actual privileged writes (updating level_reports.status, and removing
-// the level) then use the service-role client, because level_reports'
-// guard trigger only permits a service_role connection to change
-// status/reviewed_at/reviewed_by — not even a SECURITY DEFINER function
-// running as an authenticated admin satisfies that check, by design.
+// POST /api/admin/reports/review  { reportId, action: 'remove_level' | 'dismiss' }
+// (originally api/admin/reports/review.js)
 export async function reviewReport(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' });
+
   const auth = await requireAdmin(req, res);
   if (!auth) return;
   const { userId } = auth;

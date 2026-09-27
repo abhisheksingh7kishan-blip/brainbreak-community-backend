@@ -23,6 +23,29 @@
 
 import { createClient } from '@supabase/supabase-js';
 
+// The game runs inside a packaged Android app, not a page served from this
+// same domain — every request is cross-origin from the WebView's point of
+// view, so every response needs these headers or the request gets silently
+// blocked client-side before your code ever sees a response. `*` is fine
+// here: these endpoints are already protected by Supabase auth/RLS, not by
+// which origin is asking, and a packaged app doesn't have a fixed origin
+// to allow-list anyway (WebViews commonly use `file://`, `null`, or an
+// app-specific custom scheme depending on the wrapper).
+//
+// Every handler must call this FIRST, and return immediately if it
+// returns true (that means the request was a CORS preflight OPTIONS call,
+// already fully answered).
+export function handleCors(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') {
+    res.status(204).end();
+    return true;
+  }
+  return false;
+}
+
 export function clientFor(req) {
   const authHeader = req.headers.authorization || req.headers.Authorization || '';
   return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, {
@@ -31,22 +54,10 @@ export function clientFor(req) {
   });
 }
 
-// Memoized across a warm Vercel invocation: serviceClient() always uses the
-// same fixed service-role credentials (never anything from `req`), so
-// there's nothing to gain from constructing a brand-new client object on
-// every single call the way clientFor(req) must (that one carries a
-// different per-request Authorization header each time). Reusing the same
-// instance shaves a little work off every achievement-sync, admin, and
-// cron call without changing behavior at all — still the same key, same
-// RLS-bypassing client, same "never built from req" guarantee.
-let _serviceClient = null;
 export function serviceClient() {
-  if (!_serviceClient) {
-    _serviceClient = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-  }
-  return _serviceClient;
+  return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
 }
 
 // Resolves the authenticated user id from the request's bearer token, or

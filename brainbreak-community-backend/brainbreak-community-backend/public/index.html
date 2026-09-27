@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Community World — Status</title>
+<style>
+  :root { color-scheme: dark; }
+  body {
+    margin: 0; font-family: -apple-system, system-ui, sans-serif;
+    background: #0b0d18; color: #eaf0ff;
+  }
+  .wrap { max-width: 560px; margin: 0 auto; padding: 40px 16px 60px; }
+  .brand { color: #8892b0; font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 8px; }
+  h1 { font-size: 20px; margin: 0 0 28px; }
+
+  .banner {
+    border-radius: 14px; padding: 20px; display: flex; align-items: center; gap: 14px;
+    border: 1px solid #23274a; background: #12152c; margin-bottom: 24px;
+  }
+  .dot {
+    width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0;
+    background: #3a3f66; box-shadow: 0 0 0 0 rgba(0,0,0,0);
+  }
+  .dot.ok { background: #35d68a; box-shadow: 0 0 14px 2px rgba(53,214,138,0.45); }
+  .dot.bad { background: #ff4f5e; box-shadow: 0 0 14px 2px rgba(255,79,94,0.45); }
+  .dot.pending { background: #ffcf5c; animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+  .banner-text .title { font-size: 16px; font-weight: 700; margin-bottom: 2px; }
+  .banner-text .sub { font-size: 12px; color: #8892b0; }
+
+  .card {
+    background: #12152c; border: 1px solid #23274a; border-radius: 12px;
+    padding: 4px 16px; margin-bottom: 16px;
+  }
+  .row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 13px 0; border-bottom: 1px solid #1c2040; font-size: 13px;
+  }
+  .row:last-child { border-bottom: none; }
+  .row .label { color: #c8cfe6; }
+  .pill {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.4px; padding: 3px 9px;
+    border-radius: 999px; text-transform: uppercase;
+  }
+  .pill.ok { background: rgba(53,214,138,0.14); color: #35d68a; }
+  .pill.bad { background: rgba(255,79,94,0.14); color: #ff4f5e; }
+  .pill.pending { background: rgba(255,207,92,0.14); color: #ffcf5c; }
+
+  .error-box {
+    display: none; font-size: 12px; color: #ffb3ba; background: rgba(255,79,94,0.08);
+    border: 1px solid rgba(255,79,94,0.25); border-radius: 10px; padding: 12px 14px; margin-bottom: 16px;
+    white-space: pre-wrap; word-break: break-word;
+  }
+
+  .footer { display: flex; align-items: center; justify-content: space-between; color: #565c80; font-size: 11px; }
+  #refreshBtn {
+    background: transparent; border: 1px solid #2a2f4a; color: #8892b0; padding: 6px 10px;
+    border-radius: 8px; font-size: 11px; cursor: pointer;
+  }
+  #refreshBtn:active { opacity: 0.7; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">BrainBreak · Community World</div>
+  <h1>Backend Status</h1>
+
+  <div class="banner">
+    <div class="dot pending" id="mainDot"></div>
+    <div class="banner-text">
+      <div class="title" id="mainTitle">Checking systems…</div>
+      <div class="sub" id="mainSub">Contacting /api/health</div>
+    </div>
+  </div>
+
+  <div class="error-box" id="errorBox"></div>
+
+  <div class="card">
+    <div class="row">
+      <span class="label">Database (Supabase)</span>
+      <span class="pill pending" id="pill-database">Checking</span>
+    </div>
+    <div class="row">
+      <span class="label">SUPABASE_URL configured</span>
+      <span class="pill pending" id="pill-env-SUPABASE_URL">Checking</span>
+    </div>
+    <div class="row">
+      <span class="label">SUPABASE_ANON_KEY configured</span>
+      <span class="pill pending" id="pill-env-SUPABASE_ANON_KEY">Checking</span>
+    </div>
+    <div class="row">
+      <span class="label">SUPABASE_SERVICE_ROLE_KEY configured</span>
+      <span class="pill pending" id="pill-env-SUPABASE_SERVICE_ROLE_KEY">Checking</span>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span id="lastChecked">Last checked: —</span>
+    <button id="refreshBtn">Refresh</button>
+  </div>
+</div>
+
+<script>
+  const mainDot = document.getElementById('mainDot');
+  const mainTitle = document.getElementById('mainTitle');
+  const mainSub = document.getElementById('mainSub');
+  const errorBox = document.getElementById('errorBox');
+  const lastChecked = document.getElementById('lastChecked');
+
+  function setPill(id, ok) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.remove('pending', 'ok', 'bad');
+    el.classList.add(ok ? 'ok' : 'bad');
+    el.textContent = ok ? 'OK' : 'Down';
+  }
+
+  function setPending() {
+    mainDot.className = 'dot pending';
+    mainTitle.textContent = 'Checking systems…';
+    mainSub.textContent = 'Contacting /api/health';
+    errorBox.style.display = 'none';
+    ['database', 'env-SUPABASE_URL', 'env-SUPABASE_ANON_KEY', 'env-SUPABASE_SERVICE_ROLE_KEY'].forEach((k) => {
+      const el = document.getElementById('pill-' + k);
+      el.className = 'pill pending';
+      el.textContent = 'Checking';
+    });
+  }
+
+  async function checkHealth() {
+    setPending();
+    try {
+      const res = await fetch('/api/health', { cache: 'no-store' });
+      const data = await res.json();
+
+      setPill('pill-database', !!data.database);
+      setPill('pill-env-SUPABASE_URL', !!(data.env && data.env.SUPABASE_URL));
+      setPill('pill-env-SUPABASE_ANON_KEY', !!(data.env && data.env.SUPABASE_ANON_KEY));
+      setPill('pill-env-SUPABASE_SERVICE_ROLE_KEY', !!(data.env && data.env.SUPABASE_SERVICE_ROLE_KEY));
+
+      if (data.ok) {
+        mainDot.className = 'dot ok';
+        mainTitle.textContent = 'All systems operational';
+        mainSub.textContent = 'Community World backend is up and reachable.';
+        errorBox.style.display = 'none';
+      } else {
+        mainDot.className = 'dot bad';
+        mainTitle.textContent = 'Degraded — action needed';
+        mainSub.textContent = 'One or more checks failed. See details below.';
+        if (data.dbError) {
+          errorBox.style.display = 'block';
+          errorBox.textContent = data.dbError;
+        }
+      }
+    } catch (err) {
+      mainDot.className = 'dot bad';
+      mainTitle.textContent = 'Unreachable';
+      mainSub.textContent = 'Could not reach /api/health at all.';
+      errorBox.style.display = 'block';
+      errorBox.textContent = String(err);
+      ['database', 'env-SUPABASE_URL', 'env-SUPABASE_ANON_KEY', 'env-SUPABASE_SERVICE_ROLE_KEY'].forEach((k) => {
+        setPill('pill-' + k, false);
+      });
+    }
+    lastChecked.textContent = 'Last checked: ' + new Date().toLocaleTimeString();
+  }
+
+  document.getElementById('refreshBtn').addEventListener('click', checkHealth);
+  checkHealth();
+  setInterval(checkHealth, 30000);
+</script>
+</body>
+</html>

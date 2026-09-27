@@ -1,22 +1,18 @@
-// /api/_lib/controllers/interactions.js
+// /src/controllers/interactions.js
 //
-// POST /api/community/interactions/like     { levelId, action: 'like' | 'unlike' }
-// POST /api/community/interactions/favorite { levelId, action: 'favorite' | 'unfavorite' }
-// POST /api/community/interactions/play     { levelId }
-//
-// Logic moved verbatim from the original single-purpose files under
-// api/community/interactions/ (all deleted; their URLs now route here via
-// api/community/[...path].js). No behavior change: same RPCs (which own
-// the actual anti-duplicate guarantees via DB primary keys), same
-// validation, same response shapes.
+// Business logic for every /api/community/interactions/* route. Moved
+// here, unchanged in behavior, from the original one-file-per-route
+// handlers so a single Vercel Serverless Function
+// (api/community/interactions/[...path].js) can dispatch to all of them.
 
-import { clientFor, requireUser, friendlyError } from '../supabaseClients.js';
-import { syncAchievementsFor } from '../syncAchievements.js';
+import { requireUser, clientFor, friendlyError } from '../../api/_lib/supabaseClients.js';
+import { syncAchievementsFor } from '../../api/_lib/syncAchievements.js';
 
-// Wraps like_level()/unlike_level(). Those RPCs insert/delete on
-// level_likes, whose PRIMARY KEY (level_id, user_id) is what actually
-// prevents duplicate likes.
-export async function postLike(req, res) {
+// POST /api/community/interactions/like  { levelId, action: 'like' | 'unlike' }
+// (originally api/community/interactions/like.js)
+export async function like(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' });
+
   const auth = await requireUser(req, res);
   if (!auth) return;
   const { supabase } = auth;
@@ -41,9 +37,11 @@ export async function postLike(req, res) {
   return res.status(200).json({ ok: true, action });
 }
 
-// Same shape and same anti-duplicate guarantee as postLike, backed by
-// favorite_level()/unfavorite_level() and the level_favorites PRIMARY KEY.
-export async function postFavorite(req, res) {
+// POST /api/community/interactions/favorite  { levelId, action: 'favorite' | 'unfavorite' }
+// (originally api/community/interactions/favorite.js)
+export async function favorite(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' });
+
   const auth = await requireUser(req, res);
   if (!auth) return;
   const { supabase } = auth;
@@ -66,17 +64,20 @@ export async function postFavorite(req, res) {
   return res.status(200).json({ ok: true, action });
 }
 
-// Wraps register_level_play(), which only accepts plays on
-// status='published' levels and updates play_count plus the daily
-// aggregate — never a value the client can set directly. Works
-// anonymously too (register_level_play has no auth.uid() check).
-export async function postPlay(req, res) {
+// POST /api/community/interactions/play  { levelId }
+// (originally api/community/interactions/play.js)
+export async function play(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' });
+
   const { levelId } = req.body || {};
   if (!levelId) return res.status(400).json({ error: 'levelId is required' });
 
+  // Forwards the caller's token if present, but works fine anonymously too
+  // (register_level_play has no auth.uid() check) — plays count regardless
+  // of whether the player is signed in.
   const supabase = clientFor(req);
   const { data: level, error: lookupError } = await supabase
-    .from('levels').select('creator_id').eq('id', levelId).single();
+    .from('levels').select('creator_id, status').eq('id', levelId).single();
 
   if (lookupError || !level) return res.status(404).json({ error: 'This level is no longer available.' });
 
