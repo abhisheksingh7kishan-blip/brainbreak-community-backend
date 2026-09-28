@@ -112,3 +112,22 @@ export function friendlyError(error) {
   if (msg.includes('removed level')) return { status: 409, message: 'This level was removed and can no longer be edited.' };
   return { status: 500, message: 'Something went wrong on our end. Please try again.' };
 }
+
+// Reads the route segments straight from the request URL instead of trusting
+// how the platform fills in `req.query.path` for [...path].js catch-all files
+// (that value can arrive as an array, a slash-joined string, or be missing,
+// depending on the runtime). `base` is the fixed URL prefix of the calling
+// dispatcher, e.g. '/api/community/levels'. Falls back to req.query.path only
+// if the URL doesn't contain that prefix (e.g. behind a rewrite).
+export function pathSegments(req, base) {
+  const decode = (x) => { try { return decodeURIComponent(x); } catch (e) { return x; } };
+  const pathname = String(req.url || '').split('?')[0];
+  const idx = pathname.indexOf(base);
+  if (idx !== -1) {
+    return pathname.slice(idx + base.length).split('/').filter(Boolean).map(decode);
+  }
+  const q = req.query && req.query.path;
+  if (Array.isArray(q)) return q.flatMap((x) => String(x).split('/')).filter(Boolean);
+  if (q) return String(q).split('/').filter(Boolean);
+  return [];
+}

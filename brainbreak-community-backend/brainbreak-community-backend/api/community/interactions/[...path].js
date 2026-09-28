@@ -13,19 +13,17 @@
 //   POST /api/community/interactions/favorite
 //   POST /api/community/interactions/play
 
-import { handleCors } from '../../_lib/supabaseClients.js';
+import { handleCors, pathSegments } from '../../_lib/supabaseClients.js';
 import { like, favorite, play } from '../../../src/controllers/interactions.js';
 
 export default async function handler(req, res) {
   if (handleCors(req, res)) return;
 
-  const segments = Array.isArray(req.query.path)
-    ? req.query.path
-    : req.query.path ? [req.query.path] : [];
+  const segments = pathSegments(req, '/api/community/interactions');
 
   if (segments.length === 1 && segments[0] === 'like') return like(req, res);
   if (segments.length === 1 && segments[0] === 'favorite') return favorite(req, res);
   if (segments.length === 1 && segments[0] === 'play') return play(req, res);
 
-  return res.status(404).json({ error: 'not_found' });
+  return res.status(404).json({ error: 'not_found', debug: { url: req.url, segments } });
 }

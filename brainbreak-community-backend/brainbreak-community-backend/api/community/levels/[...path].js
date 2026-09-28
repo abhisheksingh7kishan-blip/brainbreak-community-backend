@@ -20,7 +20,7 @@
 // uuids, so there is no real collision, but the explicit check avoids
 // ever relying on that assumption.
 
-import { handleCors } from '../../_lib/supabaseClients.js';
+import { handleCors, pathSegments } from '../../_lib/supabaseClients.js';
 import { getById, getPlayData, discover, report, unpublish } from '../../../src/controllers/levels.js';
 
 const RESERVED = new Set(['discover', 'report', 'unpublish']);
@@ -28,9 +28,7 @@ const RESERVED = new Set(['discover', 'report', 'unpublish']);
 export default async function handler(req, res) {
   if (handleCors(req, res)) return;
 
-  const segments = Array.isArray(req.query.path)
-    ? req.query.path
-    : req.query.path ? [req.query.path] : [];
+  const segments = pathSegments(req, '/api/community/levels');
 
   if (segments.length === 1 && segments[0] === 'discover') {
     return discover(req, res);
@@ -52,5 +50,5 @@ export default async function handler(req, res) {
     return getById(req, res, segments[0]);
   }
 
-  return res.status(404).json({ error: 'not_found' });
+  return res.status(404).json({ error: 'not_found', debug: { url: req.url, segments } });
 }

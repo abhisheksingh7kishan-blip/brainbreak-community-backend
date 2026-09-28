@@ -12,15 +12,13 @@
 //   GET  /api/admin/reports/list
 //   POST /api/admin/reports/review
 
-import { handleCors } from '../_lib/supabaseClients.js';
+import { handleCors, pathSegments } from '../_lib/supabaseClients.js';
 import { listReports, reviewReport } from '../../src/controllers/admin.js';
 
 export default async function handler(req, res) {
   if (handleCors(req, res)) return;
 
-  const segments = Array.isArray(req.query.path)
-    ? req.query.path
-    : req.query.path ? [req.query.path] : [];
+  const segments = pathSegments(req, '/api/admin');
 
   if (segments.length === 2 && segments[0] === 'reports' && segments[1] === 'list') {
     return listReports(req, res);
@@ -30,5 +28,5 @@ export default async function handler(req, res) {
     return reviewReport(req, res);
   }
 
-  return res.status(404).json({ error: 'not_found' });
+  return res.status(404).json({ error: 'not_found', debug: { url: req.url, segments } });
 }

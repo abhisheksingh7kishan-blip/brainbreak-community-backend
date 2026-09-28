@@ -19,7 +19,7 @@
 //   GET /api/community/creators/:id/achievements
 //   GET /api/community/creators/:id
 
-import { handleCors } from '../../_lib/supabaseClients.js';
+import { handleCors, pathSegments } from '../../_lib/supabaseClients.js';
 import {
   getLeaderboard,
   getProfile,
@@ -31,9 +31,7 @@ import {
 export default async function handler(req, res) {
   if (handleCors(req, res)) return;
 
-  const segments = Array.isArray(req.query.path)
-    ? req.query.path
-    : req.query.path ? [req.query.path] : [];
+  const segments = pathSegments(req, '/api/community/creators');
 
   if (segments.length === 1 && segments[0] === 'leaderboard') {
     return getLeaderboard(req, res);
@@ -55,5 +53,5 @@ export default async function handler(req, res) {
     return getProfile(req, res, segments[0]);
   }
 
-  return res.status(404).json({ error: 'not_found' });
+  return res.status(404).json({ error: 'not_found', debug: { url: req.url, segments } });
 }
