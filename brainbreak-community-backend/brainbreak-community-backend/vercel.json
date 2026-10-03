@@ -1,5 +1,11 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    { "source": "/api/community/levels/:path*", "destination": "/api/community/levels/[...path]" },
+    { "source": "/api/community/creators/:path*", "destination": "/api/community/creators/[...path]" },
+    { "source": "/api/community/interactions/:path*", "destination": "/api/community/interactions/[...path]" },
+    { "source": "/api/admin/:path*", "destination": "/api/admin/[...path]" }
+  ],
   "crons": [
     {
       "path": "/api/cron/refresh-leaderboard",
@@ -7,3 +13,4 @@
     }
   ]
 }
+
